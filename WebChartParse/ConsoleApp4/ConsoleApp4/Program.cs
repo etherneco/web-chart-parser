@@ -1,69 +1,68 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace ConsoleApp4
 {
-    class Program
+    public static class Program
     {
-
         public static string GetWordFromText(string input, int wordNumberToFind)
         {
-
-                if (input == null)
-                    throw new ArgumentNullException();
-                else
-                {
-
-                    List<String> list = new List<string>();
-                    string a = "";
-                    for (int i = 0; i < input.Length; i++)
-                    {
-                        if ((input[i] >= 'A' && input[i] <= 'Z') || (input[i] >= 'a' && input[i] <= 'z'))
-                        {
-                            a += input[i];
-                        }
-                        else
-                        {
-                            list.Add(a);
-                            a = "";
-
-
-                        }
-                    }
-                    if (!a.Equals("")) list.Add(a);
-
-                    if (list.Count() < wordNumberToFind || wordNumberToFind < 1)
-                    {
-                        throw new ArgumentOutOfRangeException();
-
-                    }
-                    else
-                    {
-                        return list[wordNumberToFind - 1];
-                    }
-
-
-                }
-
-                return string.Empty;
+            if (input == null)
+            {
+                throw new ArgumentNullException(nameof(input));
             }
 
+            if (wordNumberToFind < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(wordNumberToFind));
+            }
 
-        public string Reverse(string input)
+            List<string> words = new List<string>();
+            StringBuilder current = new StringBuilder();
+
+            for (int i = 0; i < input.Length; i++)
+            {
+                char c = input[i];
+                if (char.IsLetter(c))
+                {
+                    current.Append(c);
+                }
+                else if (current.Length > 0)
+                {
+                    words.Add(current.ToString());
+                    current.Clear();
+                }
+            }
+
+            if (current.Length > 0)
+            {
+                words.Add(current.ToString());
+            }
+
+            if (words.Count < wordNumberToFind)
+            {
+                throw new ArgumentOutOfRangeException(nameof(wordNumberToFind));
+            }
+
+            return words[wordNumberToFind - 1];
+        }
+
+        public static string Reverse(string input)
         {
+            if (input == null)
+            {
+                throw new ArgumentNullException(nameof(input));
+            }
 
             char[] charArray = input.ToCharArray();
             Array.Reverse(charArray);
             return new string(charArray);
-
         }
 
-        static void Main(string[] args)
+        public static void Main(string[] args)
         {
-            Console.WriteLine(GetWordFromText("one two three", 0));
+            Console.WriteLine(GetWordFromText("one two three", 2));
             Console.ReadLine();
         }
     }

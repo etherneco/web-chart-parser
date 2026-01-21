@@ -1,10 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Text;
-using System.Linq;
-using System.Web;
 using System.Web.Mvc;
 using WebChartParse.Models;
 
@@ -12,113 +10,110 @@ namespace WebChartParse.Controllers
 {
     public class ChartController : Controller
     {
-        // GET: Chart
         public ActionResult Index()
         {
             return View();
         }
-        // GET: Chart
+
         public ActionResult Draw(string id)
         {
+            string expression = DecodeExpression(id);
 
-            if(id != null)
-            if (!id.Equals(""))
+            const int Width = 1920;
+            const int Height = 1080;
+            const int AxisMax = 10;
+            const int AxisMin = -10;
+            const int AxisStep = 1;
+            const double XStep = 0.1;
+
+            using (Image image = new Bitmap(Width, Height))
+            using (Graphics graphics = Graphics.FromImage(image))
+            using (Pen axisPen = new Pen(Color.Black, 5))
+            using (Pen gridPen = new Pen(Color.Gray, 1))
+            using (Pen graphPen = new Pen(Color.Red, 3))
             {
-               byte[] data = Convert.FromBase64String(id);
-               id = ASCIIEncoding.ASCII.GetString(data);
-            }
+                int rangeChartX = AxisMax - AxisMin;
+                float centerX = rangeChartX / 2f;
+                float scaleX = (float)Width / rangeChartX;
 
-            int width = 1920;
-            int height = 1080;
+                int rangeChartY = AxisMax - AxisMin;
+                float centerY = rangeChartY / 2f;
+                float scaleY = (float)Height / rangeChartY;
 
-            Image image = new Bitmap(width, height);
-
-            int xMax = 10;
-            int yMax = 10;
-            int xMin = -10;
-            int yMin = -10;
-            int Xcounter = 1;
-            int Ycounter = 1;
-
-
-            int rangeChartX = xMax - xMin;
-            int centerX = rangeChartX / 2;
-            float scaleX = width / rangeChartX;
-
-            int rangeChartY = yMax - yMin;
-            int centerY = rangeChartY / 2;
-            float scaleY = height / rangeChartY;
-
-
-            double xStep = 0.1;
-
-            Pen pen;
-
-            using (Graphics g = Graphics.FromImage(image))
-            {
-                for (int i = xMin; i <= xMax+Xcounter; i += Xcounter)
+                for (int i = AxisMin; i <= AxisMax + AxisStep; i += AxisStep)
                 {
-                    if (i == 0)
-                        pen = new Pen(Color.Black, 5);
-                    else
-                        pen = new Pen(Color.Gray, 1);
+                    Pen penToUse = i == 0 ? axisPen : gridPen;
                     float xRes = (i + centerX) * scaleX;
-                    g.DrawLine(pen, xRes, 0, xRes, height);
-
+                    graphics.DrawLine(penToUse, xRes, 0, xRes, Height);
                 }
 
-                for (int i = yMin; i <= yMax+Ycounter; i += Ycounter)
+                for (int i = AxisMin; i <= AxisMax + AxisStep; i += AxisStep)
                 {
-                    if (i == 0)
-                        pen = new Pen(Color.Black, 5);
-                    else
-                        pen = new Pen(Color.Gray, 1);
+                    Pen penToUse = i == 0 ? axisPen : gridPen;
                     float yRes = (i + centerY) * scaleY;
-                    g.DrawLine(pen, 0, yRes, width, yRes);
-
+                    graphics.DrawLine(penToUse, 0, yRes, Width, yRes);
                 }
 
-                if (id != null)
+                if (!string.IsNullOrWhiteSpace(expression))
                 {
-                    g.DrawString(id, new Font(FontFamily.GenericSansSerif, 16, FontStyle.Bold), new SolidBrush(Color.Green), 5, 5);
+                    using (Font labelFont = new Font(FontFamily.GenericSansSerif, 16, FontStyle.Bold))
+                    using (Brush labelBrush = new SolidBrush(Color.Green))
+                    {
+                        graphics.DrawString(expression, labelFont, labelBrush, 5, 5);
+                    }
 
+                    string loweredExpression = expression.ToLowerInvariant();
+                    Parser parser = new Parser();
 
-                    id = id.ToLower();
-          
-                    double xStart = xMin;
-                    double yStart = new Parser().parse(id.Replace("x", "("+xStart+")"));
+                    double xStart = AxisMin;
+                    string xStartExpression = loweredExpression.Replace(
+                        "x",
+                        "(" + xStart.ToString(CultureInfo.InvariantCulture) + ")");
+                    double yStart = parser.Parse(xStartExpression);
 
                     float moveLineX = (float)((xStart + centerX) * scaleX);
                     float moveLineY = (float)((centerY - yStart) * scaleY);
 
-                    pen = new Pen(Color.Red, 3);
-
-                    double exactly = 1 / xStep;
-                    for (double i = xMin*exactly; i <= (xMax + Xcounter)*exactly; i += 1)
+                    double stepsPerUnit = 1d / XStep;
+                    for (double i = AxisMin * stepsPerUnit; i <= (AxisMax + AxisStep) * stepsPerUnit; i += 1)
                     {
-                        double x = i / exactly;
-                        double y = new Parser().parse(id.Replace("x", "(" + x + ")"));
+                        double x = i / stepsPerUnit;
+                        string pointExpression = loweredExpression.Replace(
+                            "x",
+                            "(" + x.ToString(CultureInfo.InvariantCulture) + ")");
+                        double y = parser.Parse(pointExpression);
                         float lineToX = (float)((x + centerX) * scaleX);
                         float lineToY = (float)((centerY - y) * scaleY);
-                        g.DrawLine(pen, moveLineX, moveLineY, lineToX, lineToY);
+                        graphics.DrawLine(graphPen, moveLineX, moveLineY, lineToX, lineToY);
                         moveLineX = lineToX;
                         moveLineY = lineToY;
-
-
                     }
-
                 }
 
+                using (MemoryStream ms = new MemoryStream())
+                {
+                    image.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+                    return File(ms.ToArray(), "image/png");
+                }
+            }
+        }
 
+        private static string DecodeExpression(string encoded)
+        {
+            if (string.IsNullOrWhiteSpace(encoded))
+            {
+                return string.Empty;
             }
 
-            System.IO.MemoryStream ms = new MemoryStream();
-
-            image.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
-
-            return File(ms.ToArray(), "image/png");
-
-
+            try
+            {
+                byte[] data = Convert.FromBase64String(encoded);
+                return Encoding.ASCII.GetString(data);
+            }
+            catch (FormatException)
+            {
+                return encoded;
+            }
         }
     }
 }

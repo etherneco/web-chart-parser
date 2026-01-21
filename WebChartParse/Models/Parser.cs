@@ -1,354 +1,376 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Web;
+using System;
+using System.Globalization;
 
 namespace WebChartParse.Models
 {
-    class Parser
+    public class Parser
     {
-
-        public void wr(string p)
+        public double Parse(string expression)
         {
-        }
-
-        public double resolveFun(string name, string param = "")
-        {
-
-            if (name.Equals("pi"))
-                return Math.PI;
-            else if (name.Equals("e"))
-                return Math.E;
-            else if (name.Equals("abs"))
-                return Math.Abs(Double.Parse(param));
-            else if (name.Equals("sqrt"))
+            if (string.IsNullOrWhiteSpace(expression))
             {
-                if (Double.Parse(param) < 0) return 0;
-                return Math.Sqrt(Double.Parse(param));
-            }
-            else if (name.Equals("sin"))
-                return Math.Sin(Double.Parse(param));
-            else if (name.Equals("cos"))
-                return Math.Cos(Double.Parse(param));
-            else if (name.Equals("tg"))
-                return Math.Tan(Double.Parse(param));
-            else if (name.Equals("ctg"))
-            {
-                if (Math.Tan(Double.Parse(param)) == 0) return 0;
-                return 1 / Math.Tan(Double.Parse(param));
+                return 0;
             }
 
-            return 0;
-        }
+            string exp = expression.ToLowerInvariant().Replace(',', '.');
 
-        public double parse(string exp)
-        {
-
-            exp = exp.ToLower();
-            exp.Replace('.', ',');
-
-            double result1 = 0, result2 = 0, result3 = 0;
+            double result1 = 0;
+            double result2 = 0;
+            double result3 = 0;
             int prior = 0;
-            char lastOperation1 = '0', lastOperation2 = '0', lastOperation3 = '0';
-            string subexp = "";
-            string subfun = "";
-            string bracketExp = "";
+            char lastOperation1 = '\0';
+            char lastOperation2 = '\0';
+            char lastOperation3 = '\0';
+            string subexp = string.Empty;
+            string subfun = string.Empty;
+            string bracketExp = string.Empty;
 
             int bracketCount = 0;
             bool isBracket = false;
 
             for (int i = 0; i < exp.Length; i++)
             {
+                char current = exp[i];
                 if (isBracket)
                 {
-                    if (exp[i] == '(')
+                    if (current == '(')
+                    {
                         bracketCount++;
-                    else if (exp[i] == ')')
+                    }
+                    else if (current == ')')
                     {
                         if (bracketCount > 0)
-
+                        {
                             bracketCount--;
+                        }
                         else
                         {
-                            subexp = "" + (parse(bracketExp));
-                            bracketExp = "";
+                            subexp = Parse(bracketExp).ToString(CultureInfo.InvariantCulture);
+                            bracketExp = string.Empty;
                             isBracket = false;
-                            if (!subfun.Equals(""))
+                            if (!string.IsNullOrEmpty(subfun))
                             {
-                                subexp = "" + resolveFun(subfun, subexp);
+                                subexp = ResolveFunction(subfun, subexp).ToString(CultureInfo.InvariantCulture);
                             }
-                            subfun = "";
+                            subfun = string.Empty;
+                        }
+                    }
+
+                    if (isBracket)
+                    {
+                        bracketExp += current;
+                    }
+
+                    continue;
+                }
+
+                switch (current)
+                {
+                    case '+':
+                    case '-':
+                        if (!string.IsNullOrEmpty(subfun))
+                        {
+                            subexp = ResolveFunction(subfun).ToString(CultureInfo.InvariantCulture);
+                        }
+                        subfun = string.Empty;
+
+                        if (prior == 1)
+                        {
+                            if (lastOperation1 == '+')
+                            {
+                                result1 += ParseNumber(subexp);
+                            }
+                            else if (lastOperation1 == '-')
+                            {
+                                result1 -= ParseNumber(subexp);
+                            }
+                        }
+                        else if (prior == 2)
+                        {
+                            if (lastOperation2 == '*')
+                            {
+                                result1 *= ParseNumber(subexp);
+                            }
+                            else if (lastOperation2 == '/')
+                            {
+                                if (ParseNumber(subexp) == 0)
+                                {
+                                    return 0;
+                                }
+
+                                result1 /= ParseNumber(subexp);
+                            }
+
+                            if (lastOperation1 == '+')
+                            {
+                                result1 += result2;
+                            }
+                            else if (lastOperation1 == '-')
+                            {
+                                result2 -= result1;
+                                result1 = result2;
+                            }
+                        }
+                        else if (prior == 3)
+                        {
+                            if (lastOperation3 == '^')
+                            {
+                                result1 = Math.Pow(result1, ParseNumber(subexp));
+                            }
+
+                            if (lastOperation2 == '*')
+                            {
+                                result1 *= result2;
+                            }
+                            else if (lastOperation2 == '/')
+                            {
+                                result1 = result2 / result1;
+                            }
+
+                            if (lastOperation1 == '+')
+                            {
+                                result1 += result3;
+                            }
+                            else if (lastOperation1 == '-')
+                            {
+                                result1 = result3 - result1;
+                            }
+
+                            result3 = 0;
+                            result2 = 0;
+                        }
+                        else
+                        {
+                            result1 = string.IsNullOrEmpty(subexp) ? 0 : ParseNumber(subexp);
                         }
 
-                    }
-                    if (isBracket)
-                        bracketExp += exp[i];
+                        subexp = string.Empty;
+                        prior = 1;
+                        lastOperation1 = current;
+                        break;
+                    case '*':
+                    case '/':
+                        if (!string.IsNullOrEmpty(subfun))
+                        {
+                            subexp = ResolveFunction(subfun).ToString(CultureInfo.InvariantCulture);
+                        }
+                        subfun = string.Empty;
 
-
-                }
-                else
-                {
-
-
-
-
-                    switch (exp[i])
-                    {
-                        case '+':
-                        case '-':
+                        if (prior == 1)
+                        {
+                            result2 = result1;
+                            result1 = ParseNumber(subexp);
+                        }
+                        else if (prior == 2)
+                        {
+                            if (lastOperation2 == '*')
                             {
-
-                                if (!subfun.Equals(""))
-                                    subexp = "" + resolveFun(subfun);
-                                subfun = "";
-
-
-                                if (prior == 1)
-                                {
-                                    if (lastOperation1 == '+')
-                                        result1 += Double.Parse(subexp);
-                                    else if (lastOperation1 == '-')
-                                        result1 -= Double.Parse(subexp);
-
-                                }
-                                else if (prior == 2)
-                                {
-                                    if (lastOperation2 == '*')
-                                        result1 *= Double.Parse(subexp);
-                                    else if (lastOperation2 == '/')
-                                    {
-                                        if (Double.Parse(subexp) == 0) return 0;
-                                        result1 /= Double.Parse(subexp);
-                                    }
-                                    if (lastOperation1 == '+')
-                                        result1 += result2;
-                                    else if (lastOperation1 == '-')
-                                    {
-                                        result2 -= result1;
-                                        result1 = result2;
-                                    }
-                                }
-                                else if (prior == 3)
-                                {
-
-
-                                    if (lastOperation3 == '^')
-                                        result1 = Math.Pow(result1, Double.Parse(subexp));
-                                    if (lastOperation2 == '*')
-                                        result1 *= result2;
-                                    else if (lastOperation2 == '/')
-                                        result1 = result2 / result1;
-                                    if (lastOperation1 == '+')
-                                        result1 += result3;
-                                    else if (lastOperation1 == '-')
-                                        result1 = result3 - result1;
-                                    result3 = 0;
-                                    result2 = 0;
-
-                                }
-
-                                else
-                                {
-                                    if (subexp.Equals(""))
-                                        result1 = 0;
-                                    else
-                                        result1 = Double.Parse(subexp);
-                                }
-
-                                subexp = "";
-                                prior = 1;
-                                lastOperation1 = exp[i];
-                                break;
-
+                                result1 *= ParseNumber(subexp);
                             }
-                        case '*':
-                        case '/':
+                            else if (lastOperation2 == '/')
                             {
-
-                                if (!subfun.Equals(""))
-                                    subexp = "" + resolveFun(subfun);
-                                subfun = "";
-                                if (prior == 1)
+                                if (ParseNumber(subexp) == 0)
                                 {
-                                    result2 = result1;
-                                    result1 = Double.Parse(subexp);
-                                }
-                                else if (prior == 2)
-                                {
-                                    if (lastOperation2 == '*')
-                                        result1 *= Double.Parse(subexp);
-                                    else if (lastOperation2 == '/')
-                                    {
-                                        if (Double.Parse(subexp) == 0) return 0;
-                                        result1 /= Double.Parse(subexp);
-                                    }
-
+                                    return 0;
                                 }
 
-                                else if (prior == 3)
-                                {
-                                    if (lastOperation3 == '^')
-                                        result1 = Math.Pow(result1, Double.Parse(subexp));
-                                    if (lastOperation2 == '*')
-                                        result1 *= result2;
-                                    else if (lastOperation2 == '/')
-                                    {
-                                        if (result1 == 0) return 0;
-                                        result1 = result2 / result1;
-                                    }
-
-                                }
-
-                                else
-                                {
-
-                                    result1 = Double.Parse(subexp);
-
-                                }
-
-
-
-                                prior = 2;
-                                subexp = "";
-                                lastOperation2 = exp[i];
-                                break;
+                                result1 /= ParseNumber(subexp);
+                            }
+                        }
+                        else if (prior == 3)
+                        {
+                            if (lastOperation3 == '^')
+                            {
+                                result1 = Math.Pow(result1, ParseNumber(subexp));
                             }
 
-                        case '^':
+                            if (lastOperation2 == '*')
                             {
-
-                                if (!subfun.Equals(""))
-                                    subexp = "" + resolveFun(subfun);
-                                subfun = "";
-                                wr(subexp + subfun);
-                                wr("" + exp[i]);
-
-
-
-                                if (prior == 1)
-                                {
-                                    result3 = result1;
-                                    result2 = result1;
-                                    result1 = Double.Parse(subexp);
-                                }
-                                else if (prior == 2)
-                                {
-
-                                    result3 = result2;
-                                    result2 = result1;
-                                    result1 = Double.Parse(subexp);
-                                }
-                                else if (prior == 3)
-                                {
-                                    if (lastOperation3 == '^')
-                                        result1 = Math.Pow(result1, Double.Parse(subexp));
-
-                                }
-
-                                else
-                                {
-                                    result1 = Double.Parse(subexp);
-                                }
-                                prior = 3;
-                                subexp = "";
-                                lastOperation3 = '^';
-
-
-                                break;
+                                result1 *= result2;
                             }
-
-
-                        default:
+                            else if (lastOperation2 == '/')
                             {
-                                if ((exp[i] >= '0' && exp[i] <= '9') || exp[i] == ',')
+                                if (result1 == 0)
                                 {
-                                    subexp += exp[i];
-
-                                }
-                                else if (exp[i] >= 'a' && exp[i] <= 'z')
-                                {
-                                    subfun += exp[i];
+                                    return 0;
                                 }
 
-                                else if (exp[i] == '(')
-                                    isBracket = true;
-
-                                break;
+                                result1 = result2 / result1;
                             }
-                    }
+                        }
+                        else
+                        {
+                            result1 = ParseNumber(subexp);
+                        }
+
+                        prior = 2;
+                        subexp = string.Empty;
+                        lastOperation2 = current;
+                        break;
+                    case '^':
+                        if (!string.IsNullOrEmpty(subfun))
+                        {
+                            subexp = ResolveFunction(subfun).ToString(CultureInfo.InvariantCulture);
+                        }
+                        subfun = string.Empty;
+
+                        if (prior == 1)
+                        {
+                            result3 = result1;
+                            result2 = result1;
+                            result1 = ParseNumber(subexp);
+                        }
+                        else if (prior == 2)
+                        {
+                            result3 = result2;
+                            result2 = result1;
+                            result1 = ParseNumber(subexp);
+                        }
+                        else if (prior == 3)
+                        {
+                            if (lastOperation3 == '^')
+                            {
+                                result1 = Math.Pow(result1, ParseNumber(subexp));
+                            }
+                        }
+                        else
+                        {
+                            result1 = ParseNumber(subexp);
+                        }
+
+                        prior = 3;
+                        subexp = string.Empty;
+                        lastOperation3 = '^';
+                        break;
+                    default:
+                        if (char.IsDigit(current) || current == '.')
+                        {
+                            subexp += current;
+                        }
+                        else if (current >= 'a' && current <= 'z')
+                        {
+                            subfun += current;
+                        }
+                        else if (current == '(')
+                        {
+                            isBracket = true;
+                        }
+
+                        break;
                 }
             }
 
-
-            if (!subfun.Equals(""))
-                subexp = "" + resolveFun(subfun);
-            subfun = "";
-
+            if (!string.IsNullOrEmpty(subfun))
+            {
+                subexp = ResolveFunction(subfun).ToString(CultureInfo.InvariantCulture);
+            }
+            subfun = string.Empty;
 
             if (prior == 1)
             {
-
                 if (lastOperation1 == '+')
-                    result1 += Double.Parse(subexp);
+                {
+                    result1 += ParseNumber(subexp);
+                }
                 else if (lastOperation1 == '-')
-                    result1 -= Double.Parse(subexp);
+                {
+                    result1 -= ParseNumber(subexp);
+                }
             }
             else if (prior == 2)
             {
                 if (lastOperation2 == '*')
-                    result1 *= Double.Parse(subexp);
+                {
+                    result1 *= ParseNumber(subexp);
+                }
                 else if (lastOperation2 == '/')
                 {
-                    if (Double.Parse(subexp) == 0) return 0;
-                    result1 /= Double.Parse(subexp);
+                    if (ParseNumber(subexp) == 0)
+                    {
+                        return 0;
+                    }
+
+                    result1 /= ParseNumber(subexp);
                 }
 
                 if (lastOperation1 == '+')
+                {
                     result1 += result2;
+                }
                 else if (lastOperation1 == '-')
                 {
                     result2 -= result1;
                     result1 = result2;
-
                 }
             }
-
             else if (prior == 3)
             {
-
                 if (lastOperation3 == '^')
-                    result1 = Math.Pow(result1, Double.Parse(subexp));
+                {
+                    result1 = Math.Pow(result1, ParseNumber(subexp));
+                }
 
                 if (lastOperation2 == '*')
+                {
                     result1 *= result2;
+                }
                 else if (lastOperation2 == '/')
                 {
-                    if (result1 == 0) return 0;
+                    if (result1 == 0)
+                    {
+                        return 0;
+                    }
+
                     result1 = result2 / result1;
                 }
+
                 if (lastOperation1 == '+')
+                {
                     result1 += result3;
+                }
                 else if (lastOperation1 == '-')
+                {
                     result1 = result3 - result1;
-
-
-
+                }
             }
-
             else
             {
-                result1 = Double.Parse(subexp);
+                result1 = ParseNumber(subexp);
             }
 
-
-
-
-            wr(subexp);
-            subexp = "";
-            wr(" ");
             return result1;
         }
 
+        private static double ResolveFunction(string name, string param = "")
+        {
+            switch (name)
+            {
+                case "pi":
+                    return Math.PI;
+                case "e":
+                    return Math.E;
+                case "abs":
+                    return Math.Abs(ParseNumber(param));
+                case "sqrt":
+                    double sqrtValue = ParseNumber(param);
+                    return sqrtValue < 0 ? 0 : Math.Sqrt(sqrtValue);
+                case "sin":
+                    return Math.Sin(ParseNumber(param));
+                case "cos":
+                    return Math.Cos(ParseNumber(param));
+                case "tg":
+                    return Math.Tan(ParseNumber(param));
+                case "ctg":
+                    double tanValue = Math.Tan(ParseNumber(param));
+                    return tanValue == 0 ? 0 : 1 / tanValue;
+                default:
+                    return 0;
+            }
+        }
 
+        private static double ParseNumber(string value)
+        {
+            return double.Parse(value, CultureInfo.InvariantCulture);
+        }
     }
 }
