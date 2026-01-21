@@ -15,16 +15,15 @@ namespace WebChartParse.Controllers
             return View();
         }
 
-        public ActionResult Draw(string id)
+        public ActionResult Draw(string id, double? scale, double? step)
         {
             string expression = DecodeExpression(id);
 
             const int Width = 1920;
             const int Height = 1080;
-            const int AxisMax = 10;
-            const int AxisMin = -10;
-            const int AxisStep = 1;
-            const double XStep = 0.1;
+            double axisLimit = scale.HasValue && scale.Value > 0 ? scale.Value : 10d;
+            double axisStep = step.HasValue && step.Value > 0 ? step.Value : 1d;
+            double plotStep = Math.Max(axisStep / 10d, 0.01d);
 
             using (Image image = new Bitmap(Width, Height))
             using (Graphics graphics = Graphics.FromImage(image))
@@ -32,25 +31,25 @@ namespace WebChartParse.Controllers
             using (Pen gridPen = new Pen(Color.Gray, 1))
             using (Pen graphPen = new Pen(Color.Red, 3))
             {
-                int rangeChartX = AxisMax - AxisMin;
-                float centerX = rangeChartX / 2f;
-                float scaleX = (float)Width / rangeChartX;
+                double rangeChartX = axisLimit * 2;
+                double centerX = rangeChartX / 2d;
+                double scaleX = Width / rangeChartX;
 
-                int rangeChartY = AxisMax - AxisMin;
-                float centerY = rangeChartY / 2f;
-                float scaleY = (float)Height / rangeChartY;
+                double rangeChartY = axisLimit * 2;
+                double centerY = rangeChartY / 2d;
+                double scaleY = Height / rangeChartY;
 
-                for (int i = AxisMin; i <= AxisMax + AxisStep; i += AxisStep)
+                for (double i = -axisLimit; i <= axisLimit + axisStep; i += axisStep)
                 {
-                    Pen penToUse = i == 0 ? axisPen : gridPen;
-                    float xRes = (i + centerX) * scaleX;
+                    Pen penToUse = Math.Abs(i) < 0.000001d ? axisPen : gridPen;
+                    float xRes = (float)((i + centerX) * scaleX);
                     graphics.DrawLine(penToUse, xRes, 0, xRes, Height);
                 }
 
-                for (int i = AxisMin; i <= AxisMax + AxisStep; i += AxisStep)
+                for (double i = -axisLimit; i <= axisLimit + axisStep; i += axisStep)
                 {
-                    Pen penToUse = i == 0 ? axisPen : gridPen;
-                    float yRes = (i + centerY) * scaleY;
+                    Pen penToUse = Math.Abs(i) < 0.000001d ? axisPen : gridPen;
+                    float yRes = (float)((i + centerY) * scaleY);
                     graphics.DrawLine(penToUse, 0, yRes, Width, yRes);
                 }
 
@@ -65,7 +64,7 @@ namespace WebChartParse.Controllers
                     string loweredExpression = expression.ToLowerInvariant();
                     Parser parser = new Parser();
 
-                    double xStart = AxisMin;
+                    double xStart = -axisLimit;
                     string xStartExpression = loweredExpression.Replace(
                         "x",
                         "(" + xStart.ToString(CultureInfo.InvariantCulture) + ")");
@@ -74,8 +73,8 @@ namespace WebChartParse.Controllers
                     float moveLineX = (float)((xStart + centerX) * scaleX);
                     float moveLineY = (float)((centerY - yStart) * scaleY);
 
-                    double stepsPerUnit = 1d / XStep;
-                    for (double i = AxisMin * stepsPerUnit; i <= (AxisMax + AxisStep) * stepsPerUnit; i += 1)
+                    double stepsPerUnit = 1d / plotStep;
+                    for (double i = -axisLimit * stepsPerUnit; i <= (axisLimit + axisStep) * stepsPerUnit; i += 1d)
                     {
                         double x = i / stepsPerUnit;
                         string pointExpression = loweredExpression.Replace(

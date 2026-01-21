@@ -17,7 +17,7 @@ namespace WebChartParse.Controllers
 
         public ActionResult About()
         {
-            ViewBag.Message = "Your application description page.";
+            ViewBag.Message = "This page explains what the application does and how to use it.";
 
             return View();
         }
